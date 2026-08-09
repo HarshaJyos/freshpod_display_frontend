@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, authAdmin } from '@/lib/firebaseAdmin';
+import { getDb, getAuthAdmin } from '@/lib/firebaseAdmin';
 import { getRazorpayInstance } from '@/lib/razorpayHelper';
 
 async function verifyUser(request: NextRequest) {
@@ -8,6 +8,8 @@ async function verifyUser(request: NextRequest) {
     throw new Error('Unauthorized');
   }
   const token = authHeader.split('Bearer ')[1];
+  const authAdmin = getAuthAdmin();
+  const db = getDb();
   const decodedToken = await authAdmin.verifyIdToken(token);
   const { uid } = decodedToken;
   const userDoc = await db.collection('users').doc(uid).get();
@@ -44,6 +46,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const db = getDb();
     if (user.role === 'admin') {
       const machinesSnap = await db.collection('machines').get();
       const allPaymentsPromises = machinesSnap.docs.map((doc: any) => getPaymentsForMachine(doc.id));

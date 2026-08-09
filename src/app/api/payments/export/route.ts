@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebaseAdmin';
+import { getDb } from '@/lib/firebaseAdmin';
 import { getRazorpayInstance } from '@/lib/razorpayHelper';
 
 const getPaymentsForMachine = async (machineId: string): Promise<any[]> => {
@@ -18,6 +18,7 @@ const getPaymentsForMachine = async (machineId: string): Promise<any[]> => {
 
 export async function GET() {
   try {
+    const db = getDb();
     const machinesSnap = await db.collection('machines').get();
     const allPaymentsPromises = machinesSnap.docs.map((doc: any) => getPaymentsForMachine(doc.id));
     

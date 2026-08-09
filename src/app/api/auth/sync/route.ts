@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, authAdmin } from '@/lib/firebaseAdmin';
+import { getDb, getAuthAdmin } from '@/lib/firebaseAdmin';
 
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
 
   const token = authHeader.split('Bearer ')[1];
   try {
+    const authAdmin = getAuthAdmin();
+    const db = getDb();
     const decodedToken = await authAdmin.verifyIdToken(token);
     const { uid, email } = decodedToken;
 

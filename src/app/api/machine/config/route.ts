@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db, authAdmin } from '@/lib/firebaseAdmin';
+import { getDb, getAuthAdmin } from '@/lib/firebaseAdmin';
 
 async function verifyAdmin(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -7,6 +7,8 @@ async function verifyAdmin(request: NextRequest) {
     throw new Error('Unauthorized');
   }
   const token = authHeader.split('Bearer ')[1];
+  const authAdmin = getAuthAdmin();
+  const db = getDb();
   const decodedToken = await authAdmin.verifyIdToken(token);
   const { uid } = decodedToken;
   const userDoc = await db.collection('users').doc(uid).get();
@@ -25,6 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const db = getDb();
     const machineDoc = await db.collection('machines').doc(machine_id).get();
     if (!machineDoc.exists) {
       return NextResponse.json({
@@ -66,6 +69,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'machineId is required' }, { status: 400 });
     }
 
+    const db = getDb();
     const machineDocRef = db.collection('machines').doc(machineId);
     const existingDoc = await machineDocRef.get();
     const existingData = existingDoc.exists ? existingDoc.data() : {};
