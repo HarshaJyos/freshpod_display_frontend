@@ -30,11 +30,9 @@ export async function POST(request: NextRequest) {
       amount: amountInPaise,
       currency: 'INR',
       accept_partial: false,
-      description: `Payment for FreshPod Machine ${machine_id}`,
+      description: `Payment for FreshPod Kiosk`,
       customer: {
-        name: 'FreshPod Customer',
-        email: 'customer@freshpod.in',
-        contact: '+919032185199'
+        name: 'FreshPod Customer'
       },
       notify: {
         sms: false,
