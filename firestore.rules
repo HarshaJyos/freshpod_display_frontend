@@ -25,6 +25,9 @@ service cloud.firestore {
       allow read, write, delete: if request.auth != null && 
         request.auth.token.email.lower() == userId;
         
+      // Allow any logged-in user to query the users list (needed to check if DB is empty to bootstrap)
+      allow list: if request.auth != null;
+        
       // Admins can read/write any user document
       allow read, write: if isAdmin();
     }
