@@ -72,7 +72,7 @@ export default function DashboardPage() {
 
   const auth = getAuth(app);
   const db = getFirestore(app);
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
