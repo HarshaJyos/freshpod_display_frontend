@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Check if the logged-in user is an Admin
+    function isAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Helper: Check if the logged-in user is the vendor assigned to the machine
+    function isVendorForMachine(machineId) {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.machineId == machineId;
+    }
+
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // Users can read/write their own profiles
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Users can read/write/delete email placeholder files matching their email
+      allow read, write, delete: if request.auth != null && 
+        request.auth.token.email.lower() == userId;
+        
+      // Admins can read/write any user document
+      allow read, write: if isAdmin();
+    }
+
+    // Rules for the 'machines' collection
+    match /machines/{machineId} {
+      // Allow public read access so the payment creator APIs can fetch pricing and key IDs
+      allow read: if true;
+      
+      // Allow the assigned vendor or any admin to update machine configurations
+      allow update: if request.auth != null && (isVendorForMachine(machineId) || isAdmin());
+      
+      // Allow admins to create or delete machines
+      allow create, delete: if isAdmin();
+    }
+  }
+}
