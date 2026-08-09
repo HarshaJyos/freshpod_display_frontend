@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       customer: {
         name: 'FreshPod Customer',
         email: 'customer@freshpod.in',
-        contact: '+919999999999'
+        contact: '+919032185199'
       },
       notify: {
         sms: false,
