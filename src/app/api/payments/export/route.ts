@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebaseAdmin';
 import { getRazorpayInstance } from '@/lib/razorpayHelper';
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 const getPaymentsForMachine = async (machineId: string): Promise<any[]> => {
   try {
     const { instance } = await getRazorpayInstance(machineId);

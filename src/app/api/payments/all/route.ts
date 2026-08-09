@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getAuthAdmin } from '@/lib/firebaseAdmin';
 import { getRazorpayInstance } from '@/lib/razorpayHelper';
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 async function verifyUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
