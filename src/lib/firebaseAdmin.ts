@@ -1,36 +1,23 @@
-import { initializeApp, cert, getApps, getApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 
-function getFirebaseAdminApp() {
-  if (getApps().length === 0) {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      try {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        if (serviceAccount.private_key) {
-          serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-        }
-        return initializeApp({
-          credential: cert(serviceAccount)
-        });
-      } catch (err: any) {
-        console.error('[FIREBASE ADMIN] Error parsing Service Account JSON:', err.message);
-        return initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'freshpod-901ed' });
-      }
-    } else {
-      console.log('[FIREBASE ADMIN] Initializing using Project ID fallback.');
-      return initializeApp({ projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'freshpod-901ed' });
-    }
-  }
-  return getApp();
-}
-
-export const getDb = () => {
-  getFirebaseAdminApp();
-  return getFirestore();
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-export const getAuthAdmin = () => {
-  getFirebaseAdminApp();
-  return getAuth();
+const getFirebaseApp = () => {
+  if (getApps().length === 0) {
+    return initializeApp(firebaseConfig);
+  }
+  return getApp();
+};
+
+export const getDb = () => {
+  return getFirestore(getFirebaseApp());
 };

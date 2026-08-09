@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAuth, signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, limit, deleteDoc } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,20 +86,61 @@ export default function DashboardPage() {
     return () => unsubscribe();
   }, [auth, router]);
 
-  // Authenticate against backend and synchronize session profile
+  // Authenticate and synchronize session profile directly on the client side
   const syncUserProfile = async (user: User) => {
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${backendUrl}/api/auth/sync`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const userDocRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userDocRef);
+      let data: UserProfile | null = null;
+
+      if (userSnap.exists()) {
+        data = userSnap.data() as UserProfile;
+      } else {
+        // If user doc doesn't exist, check email-keyed placeholder
+        const email = user.email?.toLowerCase().trim();
+        if (email) {
+          const placeholderRef = doc(db, 'users', email);
+          const placeholderSnap = await getDoc(placeholderRef);
+          
+          if (placeholderSnap.exists()) {
+            const placeholderData = placeholderSnap.data() || {};
+            data = {
+              email,
+              role: placeholderData.role || 'vendor',
+              machineId: placeholderData.machineId || '',
+              location: placeholderData.location || 'Not Set'
+            };
+            
+            // Link placeholder to the actual UID
+            await setDoc(userDocRef, {
+              ...data,
+              createdAt: Date.now()
+            });
+            // Delete placeholder
+            await deleteDoc(placeholderRef);
+            console.log(`[CLIENT AUTH] Linked pre-registered email ${email} to UID ${user.uid}`);
+          } else {
+            // Check if there are any other users. If not, make them admin
+            const usersSnap = await getDocs(query(collection(db, 'users'), limit(1)));
+            if (usersSnap.empty) {
+              data = {
+                email,
+                role: 'admin'
+              };
+              await setDoc(userDocRef, {
+                ...data,
+                createdAt: Date.now()
+              });
+              console.log(`[CLIENT AUTH] Bootstrapped first user ${email} as admin.`);
+            }
+          }
         }
-      });
-      if (!res.ok) {
-        throw new Error('Authentication sync failed');
       }
-      const data = (await res.json()) as UserProfile;
+
+      if (!data) {
+        throw new Error('No user profile found and not pre-registered.');
+      }
+
       setProfile(data);
       setCheckingAuth(false);
 
@@ -107,13 +148,13 @@ export default function DashboardPage() {
         setMachineId(data.machineId);
         setLocation(data.location || '');
         await loadMachineConfig(data.machineId);
-        await loadTransactions(token);
+        await loadTransactions(data);
       } else if (data.role === 'admin') {
         await loadAdminMachines();
-        await loadTransactions(token);
+        await loadTransactions(data);
       }
     } catch (err) {
-      console.error('Failed to sync profile:', err);
+      console.error('Failed to sync profile client-side:', err);
       signOut(auth);
       router.push('/login');
     }
@@ -148,21 +189,40 @@ export default function DashboardPage() {
     }
   };
 
-  // Load Transactions logs securely via backend
-  const loadTransactions = async (tokenOverride?: string) => {
+  // Load Transactions logs via public Next.js API
+  const loadTransactions = async (userProfile?: UserProfile) => {
     try {
       setErrorTransactions(false);
       setLoadingTransactions(true);
       
-      const token = tokenOverride || (firebaseUser ? await firebaseUser.getIdToken() : '');
-      const res = await fetch(`${backendUrl}/api/payments/all`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const currentProfile = userProfile || profile;
+      if (!currentProfile) return;
+
+      if (currentProfile.role === 'admin') {
+        // Fetch configurations for all machines and fetch payments in parallel
+        const machinesSnap = await getDocs(collection(db, 'machines'));
+        const promises = machinesSnap.docs.map(async (docSnap) => {
+          const res = await fetch(`${backendUrl}/api/payments/all?machineId=${docSnap.id}`);
+          if (res.ok) {
+            return res.json();
+          }
+          return [];
+        });
+        const results = await Promise.all(promises);
+        const aggregatedPayments = results.reduce((acc: any[], val: any[]) => acc.concat(val), []);
+        aggregatedPayments.sort((a: any, b: any) => b.created_at - a.created_at);
+        setTransactions(aggregatedPayments);
+      } else {
+        const mId = currentProfile.machineId;
+        if (!mId) {
+          setTransactions([]);
+          return;
         }
-      });
-      if (!res.ok) throw new Error('API server error');
-      const data = await res.json();
-      setTransactions(data);
+        const res = await fetch(`${backendUrl}/api/payments/all?machineId=${mId}`);
+        if (!res.ok) throw new Error('API server error');
+        const data = await res.json();
+        setTransactions(data);
+      }
     } catch (err) {
       console.error('Failed to fetch transactions list:', err);
       setErrorTransactions(true);
@@ -201,7 +261,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Admin: Register a new vendor and their credentials on the backend
+  // Admin: Register a new vendor and their credentials directly on Firestore
   const handleRegisterVendor = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
@@ -209,27 +269,43 @@ export default function DashboardPage() {
     setRegisteringVendor(true);
 
     try {
-      const token = firebaseUser ? await firebaseUser.getIdToken() : '';
-      const res = await fetch(`${backendUrl}/api/admin/vendors`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          email: newEmail,
-          machineId: newMachineId,
-          location: newLocation,
-          amount: parseInt(newAmount, 10),
-          razorpayKeyId: newKeyId,
-          razorpayKeySecret: newKeySecret
-        })
+      if (!newEmail || !newMachineId || !newLocation || !newAmount) {
+        throw new Error('Missing required configuration fields');
+      }
+
+      const formattedEmail = newEmail.toLowerCase().trim();
+
+      // 1. Check if email or machine is already registered
+      const emailDocRef = doc(db, 'users', formattedEmail);
+      const emailCheck = await getDoc(emailDocRef);
+      if (emailCheck.exists()) {
+        throw new Error('Email already pre-registered');
+      }
+
+      const machineDocRef = doc(db, 'machines', newMachineId);
+      const machineCheck = await getDoc(machineDocRef);
+      if (machineCheck.exists()) {
+        throw new Error('Machine ID already registered to a vendor');
+      }
+
+      // 2. Write User profile placeholder keyed by email
+      await setDoc(emailDocRef, {
+        email: formattedEmail,
+        role: 'vendor',
+        machineId: newMachineId,
+        location: newLocation,
+        createdAt: Date.now()
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to register vendor');
-      }
+      // 3. Write Machine configuration
+      await setDoc(machineDocRef, {
+        vendorUid: '', // Will link when vendor logs in
+        location: newLocation,
+        amount: Number(newAmount),
+        razorpayKeyId: newKeyId || '',
+        razorpayKeySecret: newKeySecret || '',
+        updatedAt: Date.now()
+      });
 
       setRegisterSuccess(true);
       setNewEmail('');
@@ -246,6 +322,27 @@ export default function DashboardPage() {
     } finally {
       setRegisteringVendor(false);
     }
+  };
+
+  const handleExportCSV = () => {
+    let csv = 'Payment ID,Machine ID,Date,Amount (INR),Method,Status,Customer Email,Customer Contact\n';
+    filteredTransactions.forEach((p: any) => {
+      const date = new Date(p.created_at * 1000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const amount = (p.amount / 100).toFixed(2);
+      const email = p.email || 'N/A';
+      const contact = p.contact || 'N/A';
+      const mId = p.machineId || 'N/A';
+      csv += `"${p.id}","${mId}","${date}",${amount},"${p.method}","${p.status}","${email}","${contact}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "freshpod_payments.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleLogout = async () => {
@@ -288,13 +385,12 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <a
-              href={`${backendUrl}/api/payments/export`}
-              download
+            <Button
+              onClick={handleExportCSV}
               className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
             >
               Export to CSV (Excel)
-            </a>
+            </Button>
             <Button
               onClick={handleLogout}
               className="bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-lg shadow-sm transition-all"

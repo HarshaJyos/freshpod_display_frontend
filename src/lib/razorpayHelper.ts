@@ -1,5 +1,6 @@
 import Razorpay from 'razorpay';
 import { getDb } from './firebaseAdmin';
+import { doc, getDoc } from 'firebase/firestore';
 
 export interface MachineConfig {
   machineId: string;
@@ -26,8 +27,9 @@ export const getRazorpayInstance = async (machineId: string): Promise<{ instance
 
   try {
     const db = getDb();
-    const machineDoc = await db.collection('machines').doc(machineId).get();
-    if (machineDoc.exists) {
+    const machineDocRef = doc(db, 'machines', machineId);
+    const machineDoc = await getDoc(machineDocRef);
+    if (machineDoc.exists()) {
       const data = machineDoc.data() || {};
       config = {
         machineId,
