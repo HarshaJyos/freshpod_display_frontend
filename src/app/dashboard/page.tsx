@@ -47,6 +47,8 @@ export default function DashboardPage() {
   const [machineId, setMachineId] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [location, setLocation] = useState<string>('');
+  const [razorpayKeyId, setRazorpayKeyId] = useState('');
+  const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
   const [updatingPrice, setUpdatingPrice] = useState(false);
   const [priceSuccess, setPriceSuccess] = useState(false);
 
@@ -60,6 +62,7 @@ export default function DashboardPage() {
   const [registeringVendor, setRegisteringVendor] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
   const [registerError, setRegisterError] = useState('');
+  const [showCredentials, setShowCredentials] = useState<{email: string, passcode: string, machineId: string} | null>(null);
 
   // Transactions logs states
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -68,6 +71,8 @@ export default function DashboardPage() {
 
   // Admin aggregated stats
   const [allMachines, setAllMachines] = useState<any[]>([]);
+  const [allVendors, setAllVendors] = useState<any[]>([]);
+  const [deletingVendorId, setDeletingVendorId] = useState<string>('');
   const [selectedMachineFilter, setSelectedMachineFilter] = useState<string>('all');
 
   const auth = getAuth(app);
@@ -151,6 +156,7 @@ export default function DashboardPage() {
         await loadTransactions(data);
       } else if (data.role === 'admin') {
         await loadAdminMachines();
+        await loadAdminVendors();
         await loadTransactions(data);
       }
     } catch (err) {
@@ -166,9 +172,14 @@ export default function DashboardPage() {
       const configRef = doc(db, 'machines', mId);
       const docSnap = await getDoc(configRef);
       if (docSnap.exists()) {
-        setAmount(docSnap.data().amount?.toString() || '50');
+        const configData = docSnap.data();
+        setAmount(configData.amount?.toString() || '50');
+        setRazorpayKeyId(configData.razorpayKeyId || '');
+        setRazorpayKeySecret(configData.razorpayKeySecret || '');
       } else {
         setAmount('50');
+        setRazorpayKeyId('');
+        setRazorpayKeySecret('');
       }
     } catch (err) {
       console.error('Failed to load machine configuration:', err);
@@ -186,6 +197,60 @@ export default function DashboardPage() {
       setAllMachines(machinesList);
     } catch (err) {
       console.error('Failed to load registered machines list:', err);
+    }
+  };
+
+  // Admin: Load all vendors from user profile collections
+  const loadAdminVendors = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'users'));
+      const list: any[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.role === 'vendor') {
+          list.push({
+            id: docSnap.id,
+            isPending: docSnap.id.includes('@'),
+            email: data.email || docSnap.id,
+            machineId: data.machineId || '',
+            location: data.location || 'Not Set',
+            passcode: data.passcode || 'N/A',
+            createdAt: data.createdAt || 0
+          });
+        }
+      });
+      list.sort((a, b) => b.createdAt - a.createdAt);
+      setAllVendors(list);
+    } catch (err) {
+      console.error('Failed to load vendors list:', err);
+    }
+  };
+
+  // Admin: Delete vendor and their linked machine configs
+  const handleDeleteVendor = async (vendorDocId: string, mId: string) => {
+    if (!confirm(`Are you sure you want to delete vendor "${vendorDocId}"? This will also remove the kiosk "${mId || 'N/A'}".`)) {
+      return;
+    }
+
+    try {
+      setDeletingVendorId(vendorDocId);
+
+      // 1. Delete user doc from Firestore
+      await deleteDoc(doc(db, 'users', vendorDocId));
+
+      // 2. Delete machine doc from Firestore
+      if (mId) {
+        await deleteDoc(doc(db, 'machines', mId));
+      }
+
+      alert('Vendor and Kiosk configuration deleted successfully!');
+      await loadAdminMachines();
+      await loadAdminVendors();
+    } catch (err) {
+      console.error('Failed to delete vendor:', err);
+      alert('Failed to delete vendor. Permission denied.');
+    } finally {
+      setDeletingVendorId('');
     }
   };
 
@@ -231,7 +296,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Vendor: Update specific machine price in Firestore
+  // Vendor: Update specific machine config in Firestore
   const handleUpdatePrice = async (e: React.FormEvent) => {
     e.preventDefault();
     setPriceSuccess(false);
@@ -248,6 +313,9 @@ export default function DashboardPage() {
       const configRef = doc(db, 'machines', machineId);
       await setDoc(configRef, {
         amount: price,
+        location: location,
+        razorpayKeyId: razorpayKeyId || '',
+        razorpayKeySecret: razorpayKeySecret || '',
         updatedAt: Date.now()
       }, { merge: true });
 
@@ -267,6 +335,7 @@ export default function DashboardPage() {
     setRegisterError('');
     setRegisterSuccess(false);
     setRegisteringVendor(true);
+    setShowCredentials(null);
 
     try {
       if (!newEmail || !newMachineId || !newLocation || !newAmount) {
@@ -288,16 +357,20 @@ export default function DashboardPage() {
         throw new Error('Machine ID already registered to a vendor');
       }
 
-      // 2. Write User profile placeholder keyed by email
+      // 2. Generate passcode
+      const generatedPasscode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // 3. Write User profile placeholder keyed by email
       await setDoc(emailDocRef, {
         email: formattedEmail,
         role: 'vendor',
         machineId: newMachineId,
         location: newLocation,
+        passcode: generatedPasscode,
         createdAt: Date.now()
       });
 
-      // 3. Write Machine configuration
+      // 4. Write Machine configuration
       await setDoc(machineDocRef, {
         vendorUid: '', // Will link when vendor logs in
         location: newLocation,
@@ -305,6 +378,13 @@ export default function DashboardPage() {
         razorpayKeyId: newKeyId || '',
         razorpayKeySecret: newKeySecret || '',
         updatedAt: Date.now()
+      });
+
+      // 5. Store credentials for copy overlay display
+      setShowCredentials({
+        email: formattedEmail,
+        passcode: generatedPasscode,
+        machineId: newMachineId
       });
 
       setRegisterSuccess(true);
@@ -316,6 +396,7 @@ export default function DashboardPage() {
       setNewKeySecret('');
       
       await loadAdminMachines(); // Refresh lists
+      await loadAdminVendors();
     } catch (err: any) {
       console.error('Registration failed:', err);
       setRegisterError(err.message || 'Failed to complete registration.');
@@ -415,41 +496,91 @@ export default function DashboardPage() {
         {/* VENDOR CONTROL PANEL */}
         {profile.role === 'vendor' && (
           <Card className="mb-6 border-slate-200 bg-white p-6 shadow-sm rounded-xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-2">Machine Settings ({machineId})</h2>
-            <p className="text-slate-500 text-xs mb-4">Location: <span className="font-medium text-slate-700">{location}</span></p>
+            <h2 className="text-lg font-bold text-slate-900 mb-2">Kiosk Configuration & Settings</h2>
+            <p className="text-slate-500 text-xs mb-4">
+              Machine ID: <span className="font-semibold text-slate-700">{machineId}</span> | Current Location: <span className="font-semibold text-slate-700">{location}</span>
+            </p>
             
             {priceSuccess && (
               <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800 shadow-sm">
-                Kiosk price updated successfully in Firestore!
+                Kiosk settings updated successfully in Firestore!
               </div>
             )}
 
-            <form onSubmit={handleUpdatePrice} className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex-1 space-y-1">
-                <label htmlFor="price" className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Payment Price (INR)
-                </label>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-slate-500 font-bold text-lg">₹</span>
+            <form onSubmit={handleUpdatePrice} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label htmlFor="price" className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Payment Cycle Price (INR)
+                  </label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-slate-500 font-bold text-lg">₹</span>
+                    <Input
+                      id="price"
+                      type="number"
+                      required
+                      min="1"
+                      className="border-slate-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                      disabled={updatingPrice}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="location" className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Kiosk Location
+                  </label>
                   <Input
-                    id="price"
-                    type="number"
+                    id="location"
+                    type="text"
                     required
-                    min="1"
-                    className="max-w-[120px] border-slate-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                    className="border-slate-350 rounded-md mt-1 focus:border-blue-500 focus:ring-blue-500"
                     disabled={updatingPrice}
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="keyId" className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Razorpay Key ID
+                  </label>
+                  <Input
+                    id="keyId"
+                    type="text"
+                    placeholder="rzp_live_..."
+                    className="border-slate-350 rounded-md mt-1 focus:border-blue-500 focus:ring-blue-500"
+                    disabled={updatingPrice}
+                    value={razorpayKeyId}
+                    onChange={(e) => setRazorpayKeyId(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="keySecret" className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Razorpay Key Secret
+                  </label>
+                  <Input
+                    id="keySecret"
+                    type="password"
+                    placeholder="••••••••"
+                    className="border-slate-350 rounded-md mt-1 focus:border-blue-500 focus:ring-blue-500"
+                    disabled={updatingPrice}
+                    value={razorpayKeySecret}
+                    onChange={(e) => setRazorpayKeySecret(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="flex items-end">
+
+              <div className="flex justify-end mt-2">
                 <Button
                   type="submit"
                   disabled={updatingPrice}
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-lg shadow-sm transition-all"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow-sm transition-all"
                 >
-                  {updatingPrice ? 'Updating...' : 'Update Price'}
+                  {updatingPrice ? 'Updating settings...' : 'Save Settings'}
                 </Button>
               </div>
             </form>
@@ -458,96 +589,179 @@ export default function DashboardPage() {
 
         {/* ADMIN CONTROL PANEL: Pre-register Vendors */}
         {profile.role === 'admin' && (
-          <Card className="mb-6 border-slate-200 bg-white p-6 shadow-sm rounded-xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Register New Kiosk Vendor</h2>
+          <div className="space-y-6">
             
-            {registerSuccess && (
-              <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800 shadow-sm">
-                Vendor pre-registered successfully in Firestore!
-              </div>
-            )}
-            {registerError && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
-                {registerError}
-              </div>
+            {/* Show newly generated credentials alert */}
+            {showCredentials && (
+              <Card className="border-amber-200 bg-amber-50 p-6 shadow-sm rounded-xl">
+                <h3 className="text-base font-bold text-amber-900 mb-2">🔑 Vendor Registration Credentials Created!</h3>
+                <p className="text-amber-800 text-xs mb-4">
+                  Please copy these credentials and send them to the vendor. They will need them to log in for the first time.
+                </p>
+                <div className="bg-white border border-amber-200 p-4 rounded-lg font-mono text-sm space-y-2 select-all">
+                  <div><strong>Login Email:</strong> {showCredentials.email}</div>
+                  <div><strong>Temporary Passcode:</strong> {showCredentials.passcode}</div>
+                  <div><strong>Linked Kiosk ID:</strong> {showCredentials.machineId}</div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button 
+                    onClick={() => setShowCredentials(null)}
+                    className="bg-amber-600 hover:bg-amber-705 hover:bg-amber-700 text-white font-semibold px-4 py-2 rounded-lg text-xs"
+                  >
+                    Dismiss Credentials Card
+                  </Button>
+                </div>
+              </Card>
             )}
 
-            <form onSubmit={handleRegisterVendor} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor Email</label>
-                <Input
-                  type="email"
-                  required
-                  placeholder="vendor@coreblock.in"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="border-slate-300"
-                />
+            <Card className="border-slate-200 bg-white p-6 shadow-sm rounded-xl">
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Register New Kiosk Vendor</h2>
+              
+              {registerSuccess && !showCredentials && (
+                <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800 shadow-sm">
+                  Vendor pre-registered successfully in Firestore!
+                </div>
+              )}
+              {registerError && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800 shadow-sm">
+                  {registerError}
+                </div>
+              )}
+
+              <form onSubmit={handleRegisterVendor} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor Email</label>
+                  <Input
+                    type="email"
+                    required
+                    placeholder="vendor@coreblock.in"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Machine ID</label>
+                  <Input
+                    type="text"
+                    required
+                    placeholder="FP_MACHINE_02"
+                    value={newMachineId}
+                    onChange={(e) => setNewMachineId(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location Name</label>
+                  <Input
+                    type="text"
+                    required
+                    placeholder="Bangalore, Electronic City"
+                    value={newLocation}
+                    onChange={(e) => setNewLocation(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cycle Price (INR)</label>
+                  <Input
+                    type="number"
+                    required
+                    min="1"
+                    value={newAmount}
+                    onChange={(e) => setNewAmount(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Razorpay Key ID (Optional)</label>
+                  <Input
+                    type="text"
+                    placeholder="rzp_live_..."
+                    value={newKeyId}
+                    onChange={(e) => setNewKeyId(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Razorpay Secret (Optional)</label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    value={newKeySecret}
+                    onChange={(e) => setNewKeySecret(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="md:col-span-2 flex justify-end mt-2">
+                  <Button
+                    type="submit"
+                    disabled={registeringVendor}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow-sm transition-all"
+                  >
+                    {registeringVendor ? 'Registering...' : 'Register Vendor & Kiosk'}
+                  </Button>
+                </div>
+              </form>
+            </Card>
+
+            {/* List of registered Kiosks & Vendors */}
+            <Card className="border-slate-200 bg-white shadow-sm rounded-xl overflow-hidden mb-6">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <h3 className="text-sm font-bold text-slate-700">Registered Vendors & Kiosks</h3>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Machine ID</label>
-                <Input
-                  type="text"
-                  required
-                  placeholder="FP_MACHINE_02"
-                  value={newMachineId}
-                  onChange={(e) => setNewMachineId(e.target.value)}
-                  className="border-slate-300"
-                />
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Vendor Email</TableHead>
+                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Machine ID</TableHead>
+                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Location</TableHead>
+                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Passcode</TableHead>
+                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Status</TableHead>
+                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4 text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allVendors.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-slate-500 font-medium">
+                          No registered vendors. Create one using the form above.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      allVendors.map((vendor) => (
+                        <TableRow key={vendor.id} className="hover:bg-slate-50/75 border-slate-100 transition-colors">
+                          <TableCell className="px-6 py-4 font-semibold text-slate-800">{vendor.email}</TableCell>
+                          <TableCell className="px-6 py-4 text-slate-700 font-mono text-xs">{vendor.machineId}</TableCell>
+                          <TableCell className="px-6 py-4 text-slate-600">{vendor.location}</TableCell>
+                          <TableCell className="px-6 py-4 font-mono text-xs text-slate-600">{vendor.passcode}</TableCell>
+                          <TableCell className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                              vendor.isPending 
+                                ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                : 'bg-green-50 text-green-700 border-green-100'
+                            }`}>
+                              {vendor.isPending ? 'Pending Onboarding' : 'Active'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-6 py-4 text-right">
+                            <Button
+                              onClick={() => handleDeleteVendor(vendor.id, vendor.machineId)}
+                              disabled={deletingVendorId === vendor.id}
+                              className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-1 text-xs rounded-md shadow-none hover:shadow-none hover:text-red-700"
+                            >
+                              {deletingVendorId === vendor.id ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Location Name</label>
-                <Input
-                  type="text"
-                  required
-                  placeholder="Bangalore, Electronic City"
-                  value={newLocation}
-                  onChange={(e) => setNewLocation(e.target.value)}
-                  className="border-slate-300"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cycle Price (INR)</label>
-                <Input
-                  type="number"
-                  required
-                  min="1"
-                  value={newAmount}
-                  onChange={(e) => setNewAmount(e.target.value)}
-                  className="border-slate-300"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Razorpay Key ID (Optional)</label>
-                <Input
-                  type="text"
-                  placeholder="rzp_live_..."
-                  value={newKeyId}
-                  onChange={(e) => setNewKeyId(e.target.value)}
-                  className="border-slate-300"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Razorpay Secret (Optional)</label>
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  value={newKeySecret}
-                  onChange={(e) => setNewKeySecret(e.target.value)}
-                  className="border-slate-300"
-                />
-              </div>
-              <div className="md:col-span-2 flex justify-end mt-2">
-                <Button
-                  type="submit"
-                  disabled={registeringVendor}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow-sm transition-all"
-                >
-                  {registeringVendor ? 'Registering...' : 'Register Vendor & Kiosk'}
-                </Button>
-              </div>
-            </form>
-          </Card>
+            </Card>
+          </div>
         )}
 
         {/* TRANSACTION LOGS TABLE */}

@@ -25,6 +25,9 @@ service cloud.firestore {
       allow read, write, delete: if request.auth != null && 
         request.auth.token.email.lower() == userId;
         
+      // Allow unauthenticated reads to email placeholder documents for verification during login onboarding
+      allow read: if request.auth == null && userId.matches('.*@.*');
+        
       // Allow any logged-in user to query the users list (needed to check if DB is empty to bootstrap)
       allow list: if request.auth != null;
         
