@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
       qr_id: paymentLink.id
     });
   } catch (error: any) {
-    console.error(`[API] Failed to create payment:`, error.message || error);
-    return NextResponse.json({ error: 'Failed to create payment link', details: error.message }, { status: 502 });
+    console.error(`[API] Failed to create payment:`, error);
+    const details = error.description || error.message || (error.error && error.error.description) || JSON.stringify(error);
+    return NextResponse.json({ error: 'Failed to create payment link', details }, { status: 502 });
   }
 }

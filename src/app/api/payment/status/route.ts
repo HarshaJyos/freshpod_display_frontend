@@ -41,7 +41,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ qr_id, status });
   } catch (error: any) {
-    console.error(`[API] Failed to fetch payment status for ${qr_id}:`, error.message || error);
-    return NextResponse.json({ error: 'Failed to verify payment status', details: error.message }, { status: 502 });
+    console.error(`[API] Failed to verify payment status:`, error);
+    const details = error.description || error.message || (error.error && error.error.description) || JSON.stringify(error);
+    return NextResponse.json({ error: 'Failed to verify payment status', details }, { status: 502 });
   }
 }
