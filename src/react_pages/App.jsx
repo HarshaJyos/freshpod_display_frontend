@@ -7,6 +7,7 @@ import Header from '../components_portal/Header';
 import Loading from './loading';
 import LoginPage from './LoginPage';
 import Unauthorized from './Unauthorized';
+import Payments from './Payments';
 
 // Admin Pages
 import Dashboard from './Admin/Dashboard';
@@ -87,6 +88,7 @@ function App() {
       <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={['admin']}><Layout><Analytics /></Layout></ProtectedRoute>} />
       <Route path="/admin/health" element={<ProtectedRoute allowedRoles={['admin']}><Layout><SystemHealth /></Layout></ProtectedRoute>} />
       <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><Layout><Settings /></Layout></ProtectedRoute>} />
+      <Route path="/admin/payments" element={<ProtectedRoute allowedRoles={['admin']}><Layout><Payments /></Layout></ProtectedRoute>} />
       
       {/* Dealership Routes */}
       <Route path="/dealership" element={<ProtectedRoute allowedRoles={['dealership']}><Layout><DealershipDashboard /></Layout></ProtectedRoute>} />
@@ -94,6 +96,7 @@ function App() {
       <Route path="/dealership/users" element={<ProtectedRoute allowedRoles={['dealership']}><Layout><DealershipUsers /></Layout></ProtectedRoute>} />
       <Route path="/dealership/analytics" element={<ProtectedRoute allowedRoles={['dealership']}><Layout><DealershipAnalytics /></Layout></ProtectedRoute>} />
       <Route path="/dealership/settings" element={<ProtectedRoute allowedRoles={['dealership']}><Layout><Settings /></Layout></ProtectedRoute>} />
+      <Route path="/dealership/payments" element={<ProtectedRoute allowedRoles={['dealership']}><Layout><Payments /></Layout></ProtectedRoute>} />
       
       {/* Customer Routes */}
       <Route path="/customer" element={<ProtectedRoute allowedRoles={['customer']}><Layout><CustomerDashboard /></Layout></ProtectedRoute>} />
@@ -106,11 +109,13 @@ function App() {
       
       <Route path="/customer/analytics" element={<ProtectedRoute allowedRoles={['customer']}><Layout><CustomerAnalytics /></Layout></ProtectedRoute>} />
       <Route path="/customer/settings" element={<ProtectedRoute allowedRoles={['customer']}><Layout><Settings /></Layout></ProtectedRoute>} />
+      <Route path="/customer/payments" element={<ProtectedRoute allowedRoles={['customer']}><Layout><Payments /></Layout></ProtectedRoute>} />
       
       {/* Operator Routes */}
       <Route path="/operator" element={<ProtectedRoute allowedRoles={['operator']}><Layout><OperatorDashboard /></Layout></ProtectedRoute>} />
       <Route path="/operator/machines" element={<ProtectedRoute allowedRoles={['operator']}><Layout><OperatorMachines /></Layout></ProtectedRoute>} />
       <Route path="/operator/history" element={<ProtectedRoute allowedRoles={['operator']}><Layout><OperatorHistory /></Layout></ProtectedRoute>} />
+      <Route path="/operator/payments" element={<ProtectedRoute allowedRoles={['operator']}><Layout><Payments /></Layout></ProtectedRoute>} />
       
       {/* Default Redirect based on role */}
       <Route path="/" element={

@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   Clock,
-  FileText, 
+  FileText,
+  CreditCard 
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -36,6 +37,7 @@ const Sidebar = () => {
     { path: "/admin/user", name: "User Directory", icon: Users },
     { path: "/admin/analytics", name: "Analytics", icon: BarChart3 },
     { path: "/admin/health", name: "System Health", icon: Activity },
+    { path: "/admin/payments", name: "Payments", icon: CreditCard },
     { path: "/admin/settings", name: "Settings", icon: Settings },
   ];
 
@@ -45,6 +47,7 @@ const Sidebar = () => {
     { path: "/dealership/machines", name: "My Machines", icon: ShieldCheck },
     { path: "/dealership/users", name: "User Directive", icon: Users },
     { path: "/dealership/analytics", name: "Analytics", icon: BarChart3 },
+    { path: "/dealership/payments", name: "Payments", icon: CreditCard },
     { path: "/dealership/settings", name: "Settings", icon: Settings },
   ];
 
@@ -53,6 +56,7 @@ const Sidebar = () => {
     { path: "/customer/machines", name: "My Machines", icon: ShieldCheck },
     { path: "/customer/reports", name: "Reports", icon: FileText }, 
     { path: "/customer/analytics", name: "Analytics", icon: BarChart3 },
+    { path: "/customer/payments", name: "Payments", icon: CreditCard },
     { path: "/customer/settings", name: "Settings", icon: Settings },
   ];
 
@@ -61,6 +65,7 @@ const Sidebar = () => {
     { path: "/operator", name: "Dashboard", icon: LayoutGrid },
     { path: "/operator/machines", name: "My Machines", icon: ShieldCheck },
     { path: "/operator/history", name: "History", icon: Clock },
+    { path: "/operator/payments", name: "Payments", icon: CreditCard },
   ];
 
   // Get menu items based on role
