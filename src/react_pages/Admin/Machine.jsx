@@ -35,7 +35,9 @@ const MachineManagement = () => {
     country: 'India',
     costPerTap: 0.50,
     machineCost: 100,
-    status: 'active'
+    status: 'active',
+    razorpayKeyId: '',
+    razorpayKeySecret: ''
   });
 
   useEffect(() => {
@@ -181,7 +183,9 @@ const MachineManagement = () => {
       country: 'India',
       costPerTap: 0.50,
       machineCost: 100,
-      status: 'active'
+      status: 'active',
+      razorpayKeyId: '',
+      razorpayKeySecret: ''
     });
   };
 
@@ -194,7 +198,9 @@ const MachineManagement = () => {
       country: machine.country || 'India',
       costPerTap: machine.costPerTap,
       machineCost: machine.machineCost || 100,
-      status: machine.status || 'active'
+      status: machine.status || 'active',
+      razorpayKeyId: machine.razorpayKeyId || '',
+      razorpayKeySecret: machine.razorpayKeySecret || ''
     });
     setShowEditModal(true);
   };
@@ -560,6 +566,26 @@ const MachineManagement = () => {
                     <option value="maintenance">Maintenance</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Razorpay Key ID (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.razorpayKeyId}
+                    onChange={(e) => setFormData({ ...formData, razorpayKeyId: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="rzp_live_..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Razorpay Key Secret (Optional)</label>
+                  <input
+                    type="password"
+                    value={formData.razorpayKeySecret}
+                    onChange={(e) => setFormData({ ...formData, razorpayKeySecret: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 pt-6 mt-6 border-t border-gray-100">
@@ -660,6 +686,26 @@ const MachineManagement = () => {
                     <option value="maintenance">Maintenance</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Razorpay Key ID (Optional)</label>
+                  <input
+                    type="text"
+                    value={formData.razorpayKeyId}
+                    onChange={(e) => setFormData({ ...formData, razorpayKeyId: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="rzp_live_..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Razorpay Key Secret (Optional)</label>
+                  <input
+                    type="password"
+                    value={formData.razorpayKeySecret}
+                    onChange={(e) => setFormData({ ...formData, razorpayKeySecret: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="••••••••"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3 pt-6 mt-6 border-t border-gray-100">
@@ -727,6 +773,7 @@ const MachineManagement = () => {
                     <p><span className="text-gray-500">Machine Cost:</span> ₹{(selectedMachine.machineCost || 0).toLocaleString()}</p>
                     <p><span className="text-gray-500">Total Taps:</span> {(selectedMachine.totalTaps || 0).toLocaleString()}</p>
                     <p><span className="text-gray-500">Total Revenue:</span> ₹{((selectedMachine.totalTaps || 0) * (selectedMachine.costPerTap || 0)).toLocaleString()}</p>
+                    <p><span className="text-gray-500">Razorpay Key ID:</span> <span className="font-mono text-xs">{selectedMachine.razorpayKeyId || 'Not set'}</span></p>
                   </div>
                 </div>
 
