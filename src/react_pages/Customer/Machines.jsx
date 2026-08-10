@@ -28,9 +28,9 @@ const CustomerMachines = () => {
       
       // Process machines to add calculated fields
       const processedMachines = response.data.map(machine => {
-        // CORRECT FORMULA: Revenue = Taps × Cost Per Tap
-        const monthlyRevenue = (machine.monthlyTaps || 0) * (machine.costPerTap || 0);
-        const totalRevenue = (machine.totalTaps || 0) * (machine.costPerTap || 0);
+        // CORRECT FORMULA: Revenue = Taps × Cost Per Tap (Prioritize backend computed database revenues)
+        const monthlyRevenue = machine.monthlyRevenue !== undefined ? machine.monthlyRevenue : (machine.monthlyTaps || 0) * (machine.costPerTap || 0);
+        const totalRevenue = machine.totalRevenue !== undefined ? machine.totalRevenue : (machine.totalTaps || 0) * (machine.costPerTap || 0);
         
         // CORRECT FORMULA: Net Profit = Revenue - Rent - Maintenance
         const monthlyExpenses = (machine.rentPerMonth || 0) + (machine.maintenanceCostPerMonth || 0);
@@ -119,7 +119,7 @@ const CustomerMachines = () => {
   if (loading) return <Loading />;
 
   // Calculate summary stats
-  const totalMonthlyRevenue = machineList.reduce((acc, m) => acc + ((m.monthlyTaps || 0) * (m.costPerTap || 0)), 0);
+  const totalMonthlyRevenue = machineList.reduce((acc, m) => acc + (m.monthlyRevenue || 0), 0);
   const totalMonthlyExpenses = machineList.reduce((acc, m) => acc + (m.rentPerMonth || 0) + (m.maintenanceCostPerMonth || 0), 0);
   const totalNetProfit = totalMonthlyRevenue - totalMonthlyExpenses;
 

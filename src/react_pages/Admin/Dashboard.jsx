@@ -95,8 +95,8 @@ const Dashboard = () => {
         }
       });
 
-      // Calculate revenue for this month only
-      const machineRevenue = machineMonthTaps * costPerTap;
+      // Calculate revenue for this month only (prioritize backend dynamic payments monthlyRevenue)
+      const machineRevenue = data?.monthlyRevenue !== undefined ? data.monthlyRevenue : machineMonthTaps * costPerTap;
       grandTotalRevenue += machineRevenue;
       totalTapsMonth += machineMonthTaps;
 
@@ -120,7 +120,7 @@ const Dashboard = () => {
         monthTaps: machineMonthTaps,
         totalTaps: machineTotalTaps,
         activeDays: machineActiveDays,
-        revenue: machineRevenue,
+        revenue: data?.totalRevenue !== undefined ? data.totalRevenue : machineRevenue,
         costPerTap: costPerTap,
         status: isActive ? "Active" : "Idle",
         efficiency: efficiency,

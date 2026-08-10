@@ -319,7 +319,7 @@ const handleQRUpdate = async (e) => {
 
   const machinesArray = machines ? Object.values(machines) : [];
   const totalTaps = machinesArray.reduce((sum, m) => sum + (m.totalTaps || 0), 0);
-  const totalRevenue = machinesArray.reduce((sum, m) => sum + ((m.totalTaps || 0) * (m.costPerTap || 0)), 0);
+  const totalRevenue = machinesArray.reduce((sum, m) => sum + (m.totalRevenue !== undefined ? m.totalRevenue : (m.totalTaps || 0) * (m.costPerTap || 0)), 0);
 
   if (loading) {
     return (
