@@ -116,66 +116,70 @@ const Sidebar = () => {
         fixed left-0 top-0 h-full z-[1000] 
         bg-[#F8F9FE] w-72 border-r border-gray-100
         transition-transform duration-300 ease-in-out
+        flex flex-col
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         
-        {/* Branding Section */}
-        <div className="flex items-center gap-4 px-8 py-10">
-          <div className="w-12 h-12 flex items-center justify-center overflow-hidden rounded-xl shadow-lg shadow-blue-100 bg-white">
-            <img src="/assets/logo-square.png" alt="Freshpod Logo" className="w-full h-full object-contain p-1" />
-          </div>
-          <div>
-            <h1 className="text-[#1A1C1E] font-bold text-xl tracking-tight leading-tight">
-              Freshpod
-            </h1>
-            <p className="text-[#8E97A4] text-[10px] font-bold tracking-[0.1em] uppercase mt-0.5">
-              {getBrandSubtext()}
-            </p>
-          </div>
-        </div>
-
-        {/* User Info */}
-        {user && (
-          <div className="px-6 mb-6">
-            <div className="bg-white rounded-xl p-4 border border-gray-100">
-              <p className="text-xs text-gray-500 font-medium">Logged in as</p>
-              <p className="text-sm font-bold text-gray-900 mt-1">{user.name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{user.email}</p>
-              <div className="mt-2 inline-flex px-2 py-1 bg-blue-50 rounded-lg">
-                <span className="text-[10px] font-bold text-blue-600 uppercase">{user.role}</span>
-              </div>
+        {/* Scrollable Upper Area */}
+        <div className="flex-1 overflow-y-auto select-none">
+          {/* Branding Section */}
+          <div className="flex items-center gap-4 px-8 py-10">
+            <div className="w-12 h-12 flex items-center justify-center overflow-hidden rounded-xl shadow-lg shadow-blue-100 bg-white">
+              <img src="/assets/logo-square.png" alt="Freshpod Logo" className="w-full h-full object-contain p-1" />
+            </div>
+            <div>
+              <h1 className="text-[#1A1C1E] font-bold text-xl tracking-tight leading-tight">
+                Freshpod
+              </h1>
+              <p className="text-[#8E97A4] text-[10px] font-bold tracking-[0.1em] uppercase mt-0.5">
+                {getBrandSubtext()}
+              </p>
             </div>
           </div>
-        )}
 
-        {/* Navigation Links */}
-        <nav className="px-6 space-y-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={() => setMobileOpen(false)}
-                className={({ isActive }) => `
-                  flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-200 group
-                  ${isActive 
-                    ? 'bg-white text-[#4D7CFF] shadow-sm shadow-blue-100/50' 
-                    : 'text-[#8E97A4] hover:bg-gray-200/50 hover:text-[#5C6370]'
-                  }
-                `}
-              >
-                <Icon size={22} className="transition-colors" />
-                <span className="font-semibold text-[15px]">
-                  {item.name}
-                </span>
-              </NavLink>
-            );
-          })}
-        </nav>
+          {/* User Info */}
+          {user && (
+            <div className="px-6 mb-6">
+              <div className="bg-white rounded-xl p-4 border border-gray-100">
+                <p className="text-xs text-gray-500 font-medium">Logged in as</p>
+                <p className="text-sm font-bold text-gray-900 mt-1">{user.name}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{user.email}</p>
+                <div className="mt-2 inline-flex px-2 py-1 bg-blue-50 rounded-lg">
+                  <span className="text-[10px] font-bold text-blue-600 uppercase">{user.role}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Links */}
+          <nav className="px-6 space-y-2 pb-6">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) => `
+                    flex items-center gap-4 px-6 py-4 rounded-2xl transition-all duration-200 group
+                    ${isActive 
+                      ? 'bg-white text-[#4D7CFF] shadow-sm shadow-blue-100/50' 
+                      : 'text-[#8E97A4] hover:bg-gray-200/50 hover:text-[#5C6370]'
+                    }
+                  `}
+                >
+                  <Icon size={22} className="transition-colors" />
+                  <span className="font-semibold text-[15px]">
+                    {item.name}
+                  </span>
+                </NavLink>
+              );
+            })}
+          </nav>
+        </div>
 
         {/* Logout Section */}
-        <div className="absolute bottom-8 w-full px-6">
+        <div className="border-t border-gray-100/80 p-6 shrink-0 bg-[#F8F9FE]">
           <button 
             onClick={handleLogout}
             className="flex items-center gap-4 px-6 py-4 w-full rounded-2xl text-[#8E97A4] hover:bg-red-50 hover:text-red-500 transition-all duration-200 group"
