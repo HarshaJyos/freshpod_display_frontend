@@ -1,64 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRazorpayInstance, linkCache } from '@/lib/razorpayHelper';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const { machine_id } = await request.json();
-    if (!machine_id) {
-      return NextResponse.json({ error: 'machine_id parameter is required' }, { status: 400 });
-    }
-
-    const { instance, config } = await getRazorpayInstance(machine_id);
-    const amountInPaise = Math.round(config.amount * 100);
-
-    // 1. Check Cache first
-    const cachedLink = linkCache.get(machine_id);
-    if (cachedLink && cachedLink.amount === amountInPaise) {
-      console.log(`[PAYMENT] Reusing cached active payment link for machine ${machine_id}`);
-      return NextResponse.json({
-        upi_intent: cachedLink.short_url,
-        qr_id: cachedLink.id
-      });
-    }
-
-    // 2. Generate a new payment link via Razorpay API
-    console.log(`[PAYMENT] Creating new payment link of ${config.amount} INR for machine ${machine_id}`);
-    const paymentLink = await instance.paymentLink.create({
-      amount: amountInPaise,
-      currency: 'INR',
-      accept_partial: false,
-      description: `Payment for FreshPod Kiosk`,
-      customer: {
-        name: 'FreshPod Customer'
+    const body = await request.json();
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+    
+    const res = await fetch(`${backendUrl}/api/payment/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
       },
-      notify: {
-        sms: false,
-        email: false
-      },
-      reminder_enable: false,
-      notes: {
-        machine_id: machine_id
-      }
+      body: JSON.stringify(body)
     });
 
-    // 3. Store active link config to cache
-    linkCache.set(machine_id, {
-      id: paymentLink.id,
-      short_url: paymentLink.short_url,
-      amount: amountInPaise,
-      machineId: machine_id
-    });
-
-    return NextResponse.json({
-      upi_intent: paymentLink.short_url,
-      qr_id: paymentLink.id
-    });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
   } catch (error: any) {
-    console.error(`[API] Failed to create payment:`, error);
-    const details = error.description || error.message || (error.error && error.error.description) || JSON.stringify(error);
-    return NextResponse.json({ error: 'Failed to create payment link', details }, { status: 502 });
+    console.error(`[API Proxy] Failed to create payment via backend:`, error);
+    return NextResponse.json({ error: 'Failed to create payment link via backend', details: error.message }, { status: 502 });
   }
 }

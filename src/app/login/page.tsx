@@ -41,45 +41,7 @@ export default function LoginPage() {
       router.push('/dashboard');
     } catch (err: any) {
       console.error('Authentication failure:', err);
-      const errCode = err.code || '';
-      if (errCode === 'auth/invalid-credential' || errCode === 'auth/user-not-found' || errCode === 'auth/wrong-password') {
-        // Try placeholder verification
-        try {
-          const emailClean = email.toLowerCase().trim();
-          const placeholderRef = doc(db, 'users', emailClean);
-          const placeholderSnap = await getDoc(placeholderRef);
-          
-          if (placeholderSnap.exists() && placeholderSnap.data().passcode === password) {
-            // Auto register vendor in Firebase Auth using client SDK
-            const authUserCredential = await createUserWithEmailAndPassword(auth, emailClean, password);
-            const user = authUserCredential.user;
-            
-            // Write linked user doc
-            const userDocRef = doc(db, 'users', user.uid);
-            await setDoc(userDocRef, {
-              email: emailClean,
-              role: 'vendor',
-              machineId: placeholderSnap.data().machineId || '',
-              location: placeholderSnap.data().location || '',
-              passcode: placeholderSnap.data().passcode,
-              createdAt: Date.now()
-            });
-            
-            // Delete placeholder doc
-            await deleteDoc(placeholderRef);
-            
-            // Success redirect
-            router.push('/dashboard');
-            return;
-          }
-        } catch (linkErr) {
-          console.error('Failed to link placeholder account:', linkErr);
-        }
-        
-        setError('Invalid email or password.');
-      } else {
-        setError('Connection failure. Check your network.');
-      }
+      setError('Invalid email or password.');
       setLoading(false);
     }
   };

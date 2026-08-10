@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Temporary/Migration/Test scripts
+src/replace_axios_paths.js
+migrate*.js
+update*.js
+move*.js
+test*.js
+test*.jsx
+test*.ts
+test*.tsx

@@ -59,10 +59,10 @@ export default function DashboardPage() {
   const [newAmount, setNewAmount] = useState('50');
   const [newKeyId, setNewKeyId] = useState('');
   const [newKeySecret, setNewKeySecret] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [registeringVendor, setRegisteringVendor] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
   const [registerError, setRegisterError] = useState('');
-  const [showCredentials, setShowCredentials] = useState<{email: string, passcode: string, machineId: string} | null>(null);
 
   // Transactions logs states
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -101,49 +101,24 @@ export default function DashboardPage() {
       if (userSnap.exists()) {
         data = userSnap.data() as UserProfile;
       } else {
-        // If user doc doesn't exist, check email-keyed placeholder
-        const email = user.email?.toLowerCase().trim();
-        if (email) {
-          const placeholderRef = doc(db, 'users', email);
-          const placeholderSnap = await getDoc(placeholderRef);
-          
-          if (placeholderSnap.exists()) {
-            const placeholderData = placeholderSnap.data() || {};
-            data = {
-              email,
-              role: placeholderData.role || 'vendor',
-              machineId: placeholderData.machineId || '',
-              location: placeholderData.location || 'Not Set'
-            };
-            
-            // Link placeholder to the actual UID
-            await setDoc(userDocRef, {
-              ...data,
-              createdAt: Date.now()
-            });
-            // Delete placeholder
-            await deleteDoc(placeholderRef);
-            console.log(`[CLIENT AUTH] Linked pre-registered email ${email} to UID ${user.uid}`);
-          } else {
-            // Check if there are any other users. If not, make them admin
-            const usersSnap = await getDocs(query(collection(db, 'users'), limit(1)));
-            if (usersSnap.empty) {
-              data = {
-                email,
-                role: 'admin'
-              };
-              await setDoc(userDocRef, {
-                ...data,
-                createdAt: Date.now()
-              });
-              console.log(`[CLIENT AUTH] Bootstrapped first user ${email} as admin.`);
-            }
-          }
+        // Check if there are any other users. If not, make them admin
+        const usersSnap = await getDocs(query(collection(db, 'users'), limit(1)));
+        if (usersSnap.empty) {
+          const email = user.email?.toLowerCase().trim() || '';
+          data = {
+            email,
+            role: 'admin'
+          };
+          await setDoc(userDocRef, {
+            ...data,
+            createdAt: Date.now()
+          });
+          console.log(`[CLIENT AUTH] Bootstrapped first user ${email} as admin.`);
         }
       }
 
       if (!data) {
-        throw new Error('No user profile found and not pre-registered.');
+        throw new Error('No user profile found.');
       }
 
       setProfile(data);
@@ -210,11 +185,9 @@ export default function DashboardPage() {
         if (data.role === 'vendor') {
           list.push({
             id: docSnap.id,
-            isPending: docSnap.id.includes('@'),
             email: data.email || docSnap.id,
             machineId: data.machineId || '',
             location: data.location || 'Not Set',
-            passcode: data.passcode || 'N/A',
             createdAt: data.createdAt || 0
           });
         }
@@ -235,20 +208,30 @@ export default function DashboardPage() {
     try {
       setDeletingVendorId(vendorDocId);
 
-      // 1. Delete user doc from Firestore
-      await deleteDoc(doc(db, 'users', vendorDocId));
+      let headers = {};
+      if (auth.currentUser) {
+        const token = await auth.currentUser.getIdToken();
+        headers = { 
+          'Authorization': `Bearer ${token}`
+        };
+      }
 
-      // 2. Delete machine doc from Firestore
-      if (mId) {
-        await deleteDoc(doc(db, 'machines', mId));
+      const res = await fetch(`${backendUrl}/api/admin/delete-vendor/${vendorDocId}?machineId=${mId}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to delete vendor');
       }
 
       alert('Vendor and Kiosk configuration deleted successfully!');
       await loadAdminMachines();
       await loadAdminVendors();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete vendor:', err);
-      alert('Failed to delete vendor. Permission denied.');
+      alert(err.message || 'Failed to delete vendor. Permission denied.');
     } finally {
       setDeletingVendorId('');
     }
@@ -263,27 +246,24 @@ export default function DashboardPage() {
       const currentProfile = userProfile || profile;
       if (!currentProfile) return;
 
+      let headers = {};
+      if (auth.currentUser) {
+        const token = await auth.currentUser.getIdToken();
+        headers = { 'Authorization': `Bearer ${token}` };
+      }
+
       if (currentProfile.role === 'admin') {
-        // Fetch configurations for all machines and fetch payments in parallel
-        const machinesSnap = await getDocs(collection(db, 'machines'));
-        const promises = machinesSnap.docs.map(async (docSnap) => {
-          const res = await fetch(`${backendUrl}/api/payments/all?machineId=${docSnap.id}`);
-          if (res.ok) {
-            return res.json();
-          }
-          return [];
-        });
-        const results = await Promise.all(promises);
-        const aggregatedPayments = results.reduce((acc: any[], val: any[]) => acc.concat(val), []);
-        aggregatedPayments.sort((a: any, b: any) => b.created_at - a.created_at);
-        setTransactions(aggregatedPayments);
+        const res = await fetch(`${backendUrl}/api/payments/all?machineId=all`, { headers });
+        if (!res.ok) throw new Error('API server error');
+        const data = await res.json();
+        setTransactions(data);
       } else {
         const mId = currentProfile.machineId;
         if (!mId) {
           setTransactions([]);
           return;
         }
-        const res = await fetch(`${backendUrl}/api/payments/all?machineId=${mId}`);
+        const res = await fetch(`${backendUrl}/api/payments/all?machineId=${mId}`, { headers });
         if (!res.ok) throw new Error('API server error');
         const data = await res.json();
         setTransactions(data);
@@ -329,66 +309,51 @@ export default function DashboardPage() {
     }
   };
 
-  // Admin: Register a new vendor and their credentials directly on Firestore
+  // Admin: Register a new vendor and their credentials directly on Express backend
   const handleRegisterVendor = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError('');
     setRegisterSuccess(false);
     setRegisteringVendor(true);
-    setShowCredentials(null);
 
     try {
-      if (!newEmail || !newMachineId || !newLocation || !newAmount) {
+      if (!newEmail || !newPassword || !newMachineId || !newLocation || !newAmount) {
         throw new Error('Missing required configuration fields');
       }
 
       const formattedEmail = newEmail.toLowerCase().trim();
 
-      // 1. Check if email or machine is already registered
-      const emailDocRef = doc(db, 'users', formattedEmail);
-      const emailCheck = await getDoc(emailDocRef);
-      if (emailCheck.exists()) {
-        throw new Error('Email already pre-registered');
+      let headers = {};
+      if (auth.currentUser) {
+        const token = await auth.currentUser.getIdToken();
+        headers = { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
       }
 
-      const machineDocRef = doc(db, 'machines', newMachineId);
-      const machineCheck = await getDoc(machineDocRef);
-      if (machineCheck.exists()) {
-        throw new Error('Machine ID already registered to a vendor');
+      const res = await fetch(`${backendUrl}/api/admin/create-vendor`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          email: formattedEmail,
+          password: newPassword,
+          machineId: newMachineId,
+          location: newLocation,
+          amount: Number(newAmount),
+          razorpayKeyId: newKeyId,
+          razorpayKeySecret: newKeySecret
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || errData.details || 'Failed to register vendor');
       }
-
-      // 2. Generate passcode
-      const generatedPasscode = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // 3. Write User profile placeholder keyed by email
-      await setDoc(emailDocRef, {
-        email: formattedEmail,
-        role: 'vendor',
-        machineId: newMachineId,
-        location: newLocation,
-        passcode: generatedPasscode,
-        createdAt: Date.now()
-      });
-
-      // 4. Write Machine configuration
-      await setDoc(machineDocRef, {
-        vendorUid: '', // Will link when vendor logs in
-        location: newLocation,
-        amount: Number(newAmount),
-        razorpayKeyId: newKeyId || '',
-        razorpayKeySecret: newKeySecret || '',
-        updatedAt: Date.now()
-      });
-
-      // 5. Store credentials for copy overlay display
-      setShowCredentials({
-        email: formattedEmail,
-        passcode: generatedPasscode,
-        machineId: newMachineId
-      });
 
       setRegisterSuccess(true);
       setNewEmail('');
+      setNewPassword('');
       setNewMachineId('');
       setNewLocation('');
       setNewAmount('50');
@@ -591,35 +556,12 @@ export default function DashboardPage() {
         {profile.role === 'admin' && (
           <div className="space-y-6">
             
-            {/* Show newly generated credentials alert */}
-            {showCredentials && (
-              <Card className="border-amber-200 bg-amber-50 p-6 shadow-sm rounded-xl">
-                <h3 className="text-base font-bold text-amber-900 mb-2">🔑 Vendor Registration Credentials Created!</h3>
-                <p className="text-amber-800 text-xs mb-4">
-                  Please copy these credentials and send them to the vendor. They will need them to log in for the first time.
-                </p>
-                <div className="bg-white border border-amber-200 p-4 rounded-lg font-mono text-sm space-y-2 select-all">
-                  <div><strong>Login Email:</strong> {showCredentials.email}</div>
-                  <div><strong>Temporary Passcode:</strong> {showCredentials.passcode}</div>
-                  <div><strong>Linked Kiosk ID:</strong> {showCredentials.machineId}</div>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Button 
-                    onClick={() => setShowCredentials(null)}
-                    className="bg-amber-600 hover:bg-amber-705 hover:bg-amber-700 text-white font-semibold px-4 py-2 rounded-lg text-xs"
-                  >
-                    Dismiss Credentials Card
-                  </Button>
-                </div>
-              </Card>
-            )}
-
             <Card className="border-slate-200 bg-white p-6 shadow-sm rounded-xl">
               <h2 className="text-lg font-bold text-slate-900 mb-4">Register New Kiosk Vendor</h2>
               
-              {registerSuccess && !showCredentials && (
+              {registerSuccess && (
                 <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800 shadow-sm">
-                  Vendor pre-registered successfully in Firestore!
+                  Vendor and Kiosk registered successfully!
                 </div>
               )}
               {registerError && (
@@ -637,6 +579,17 @@ export default function DashboardPage() {
                     placeholder="vendor@coreblock.in"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Vendor Password</label>
+                  <Input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
                     className="border-slate-300"
                   />
                 </div>
@@ -717,15 +670,13 @@ export default function DashboardPage() {
                       <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Vendor Email</TableHead>
                       <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Machine ID</TableHead>
                       <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Location</TableHead>
-                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Passcode</TableHead>
-                      <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4">Status</TableHead>
                       <TableHead className="font-semibold text-slate-500 uppercase tracking-wider text-xs px-6 py-4 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {allVendors.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-slate-500 font-medium">
+                        <TableCell colSpan={4} className="text-center py-8 text-slate-500 font-medium">
                           No registered vendors. Create one using the form above.
                         </TableCell>
                       </TableRow>
@@ -735,16 +686,6 @@ export default function DashboardPage() {
                           <TableCell className="px-6 py-4 font-semibold text-slate-800">{vendor.email}</TableCell>
                           <TableCell className="px-6 py-4 text-slate-700 font-mono text-xs">{vendor.machineId}</TableCell>
                           <TableCell className="px-6 py-4 text-slate-600">{vendor.location}</TableCell>
-                          <TableCell className="px-6 py-4 font-mono text-xs text-slate-600">{vendor.passcode}</TableCell>
-                          <TableCell className="px-6 py-4">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                              vendor.isPending 
-                                ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                : 'bg-green-50 text-green-700 border-green-100'
-                            }`}>
-                              {vendor.isPending ? 'Pending Onboarding' : 'Active'}
-                            </span>
-                          </TableCell>
                           <TableCell className="px-6 py-4 text-right">
                             <Button
                               onClick={() => handleDeleteVendor(vendor.id, vendor.machineId)}
