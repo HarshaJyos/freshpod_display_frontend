@@ -28,6 +28,11 @@ export default function Payments() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Manual verify states
+  const [manualQrId, setManualQrId] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyMessage, setVerifyMessage] = useState(null); // { type: 'success' | 'info' | 'error', text: string }
   
   // Filters
   const [searchMachine, setSearchMachine] = useState('');
@@ -59,6 +64,31 @@ export default function Payments() {
     }
   };
 
+  const handleVerifyManual = async (e) => {
+    e.preventDefault();
+    if (!manualQrId.trim()) return;
+
+    setVerifyLoading(true);
+    setVerifyMessage(null);
+    try {
+      const response = await axiosInstance.post('/api/payment/verify-manual', { qr_id: manualQrId.trim() });
+      if (response.data?.success) {
+        if (response.data.status === 'paid') {
+          setVerifyMessage({ type: 'success', text: response.data.message || 'Payment successfully verified and logged!' });
+          setManualQrId('');
+          fetchPayments(); // Reload history logs
+        } else {
+          setVerifyMessage({ type: 'info', text: response.data.message || `Checked status: payment is ${response.data.status}.` });
+        }
+      }
+    } catch (err) {
+      console.error('Verification failed:', err);
+      setVerifyMessage({ type: 'error', text: err.response?.data?.error || 'Failed to verify transaction ID.' });
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPayments();
   }, []);
@@ -84,7 +114,7 @@ export default function Payments() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <CreditCard className="text-blue-600" /> Transaction History
@@ -95,14 +125,55 @@ export default function Payments() {
               : 'Audit transactions and telemetry payments for your assigned kiosks'}
           </p>
         </div>
-        <button
-          onClick={fetchPayments}
-          className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 text-gray-700 font-medium text-sm transition-all"
-        >
-          <RefreshCw size={16} className="animate-hover" />
-          Refresh
-        </button>
+        
+        {/* Verify Action & Refresh */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <form onSubmit={handleVerifyManual} className="flex gap-2 bg-white p-1.5 border border-gray-200 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-500 max-w-md w-full">
+            <input
+              type="text"
+              placeholder="Verify Payment Link ID..."
+              value={manualQrId}
+              onChange={(e) => setManualQrId(e.target.value)}
+              className="px-3 py-1.5 outline-none text-sm w-full bg-transparent"
+              disabled={verifyLoading}
+            />
+            <button
+              type="submit"
+              disabled={verifyLoading || !manualQrId.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all disabled:opacity-50 whitespace-nowrap"
+            >
+              {verifyLoading ? 'Verifying...' : 'Verify Link'}
+            </button>
+          </form>
+          
+          <button
+            onClick={fetchPayments}
+            className="flex items-center justify-center gap-2 px-4 py-3 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 text-gray-700 font-semibold text-sm transition-all animate-hover"
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {verifyMessage && (
+        <div className={`p-4 border rounded-xl text-sm flex items-center justify-between gap-3 ${
+          verifyMessage.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' :
+          verifyMessage.type === 'info' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+          'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          <div className="flex items-center gap-3">
+            <AlertCircle size={20} className="shrink-0" />
+            <span>{verifyMessage.text}</span>
+          </div>
+          <button 
+            onClick={() => setVerifyMessage(null)}
+            className="text-xs font-bold underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex items-center gap-3 text-sm">
